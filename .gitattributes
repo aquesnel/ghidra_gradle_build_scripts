@@ -1,0 +1,6 @@
+# text files to perform LF normalization
+*.java text
+*.md text
+*.txt text
+*.gradle text
+LICENSE text
