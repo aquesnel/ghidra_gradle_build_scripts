@@ -1,0 +1,78 @@
+import org.gradle.api.GradleException
+
+plugins {
+    // Apply the java-library plugin for API and implementation separation.
+    id("java-library")
+    // eclipse IDE plugin
+    id("eclipse")
+}
+
+
+def ghidraInstallDir
+if (System.env.GHIDRA_INSTALL_DIR) {
+    ghidraInstallDir = System.env.GHIDRA_INSTALL_DIR
+}
+else if (project.hasProperty("GHIDRA_INSTALL_DIR")) {
+    ghidraInstallDir = project.getProperty("GHIDRA_INSTALL_DIR")
+}
+else {
+    throw new GradleException("GHIDRA_INSTALL_DIR is not defined! Run the Gradle command with '-Dorg.gradle.project.GHIDRA_INSTALL_DIR=C:\\path\\to\\Ghidra'")
+}
+
+ext.getGhidraBuildExtentionPath = () -> {
+    return new File(ghidraInstallDir).getCanonicalPath() + "/support/buildExtension.gradle"
+}
+
+// ghidra adds a 'buildHelp' task that generates sources and needs to be built before the sources can be packaged
+java {
+    withSourcesJar()
+}
+tasks.sourcesJar.dependsOn('buildHelp')
+
+eclipse {
+    project {
+        natures("org.eclipse.buildship.core.gradleprojectnature")
+        buildCommand("org.eclipse.buildship.core.gradleprojectbuilder")
+
+        linkedResource name: 'Ghidra', type: '2', location: ghidraInstallDir
+    }
+    classpath {
+        file.whenMerged { cp ->
+
+            // Add source path for all Ghidra jar files that use the "-src.zip" convention
+            cp.entries.forEach { cpEntry ->
+                if(cpEntry instanceof org.gradle.plugins.ide.eclipse.model.Library) {
+                    if (cpEntry.library.file.toPath().startsWith(ghidraInstallDir)) {
+                        // TODO: should I also add the standard maven nomenclature of "-sources.jar"? the two files have the same "*.java" content
+                        def sourceZip = file(cpEntry.library.path.replaceFirst(~'.jar$', "-src.zip"))
+                        if (sourceZip.exists()) {
+                            cpEntry.sourcePath = fileReference(sourceZip)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+def updateProps(String path, Closure closure = {}) {
+    def properties = new Properties()
+    file(path).withReader { reader ->
+        properties.load(reader)
+    }
+    closure.call(properties)
+    file(path).withWriter('utf-8') { writer ->
+          properties.store(writer, "");
+      }
+}
+
+task generateEclipseGradleGhidra {
+    description 'Configures the Eclipse Gradle build command to reference the Ghidra install directory.'
+    doLast {
+        updateProps ".settings/org.eclipse.buildship.core.prefs", { props ->
+            props.put("jvm.arguments", "-Dorg.gradle.project.GHIDRA_INSTALL_DIR=" + new File(ghidraInstallDir).getCanonicalPath());
+        }
+    }
+}
+tasks.eclipse.dependsOn(generateEclipseGradleGhidra)
