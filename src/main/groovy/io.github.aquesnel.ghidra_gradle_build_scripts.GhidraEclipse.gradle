@@ -58,19 +58,45 @@ eclipse {
 
 def updateProps(String path, Closure closure = {}) {
     def properties = new Properties()
-    file(path).withReader { reader ->
-        properties.load(reader)
+    try {
+        file(path).withReader { reader ->
+            properties.load(reader)
+        }
+    } catch (FileNotFoundException e) {
+        // ignore
     }
     closure.call(properties)
     file(path).withWriter('utf-8') { writer ->
           properties.store(writer, "");
-      }
+    }
+}
+
+def defaultEclipseGradleProperties(Properties props) {
+    // Default properties for Eclipse Gradle Buildship v3.1.10
+    props.put("arguments", "");
+    props.put("auto.sync", "false");
+    props.put("build.scans.enabled", "false");
+    props.put("connection.gradle.distribution", "GRADLE_DISTRIBUTION(WRAPPER)");
+    props.put("connection.project.dir", "");
+    props.put("eclipse.preferences.version", "1");
+    props.put("gradle.user.home", "");
+    props.put("java.home", "");
+    props.put("jvm.arguments", "");
+    props.put("offline.mode", "false");
+    props.put("override.workspace.settings", "false");
+    props.put("show.console.view", "true");
+    props.put("show.executions.view", "true");
 }
 
 task generateEclipseGradleGhidra {
     description 'Configures the Eclipse Gradle build command to reference the Ghidra install directory.'
     doLast {
         updateProps ".settings/org.eclipse.buildship.core.prefs", { props ->
+            if(props.isEmpty()) {
+                defaultEclipseGradleProperties(props)
+            }
+
+            props.put("override.workspace.settings", "true");
             props.put("jvm.arguments", "-Dorg.gradle.project.GHIDRA_INSTALL_DIR=" + new File(ghidraInstallDir).getCanonicalPath());
         }
     }
